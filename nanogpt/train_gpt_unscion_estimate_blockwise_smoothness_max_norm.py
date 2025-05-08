@@ -112,7 +112,9 @@ class Scion(torch.optim.Optimizer):
         self.params_vector = []  
         self.grads_vector = []  
         self.iter_k = 0
-        self.norm_params_difference = []           
+        self.norm_params_difference = []   
+        self.sum = 0
+        self.max_norm = 0        
         defaults = dict(lr=lr, momentum=momentum, scale=scale, unconstrained=unconstrained)
         super().__init__(params, defaults)
 
@@ -122,7 +124,8 @@ class Scion(torch.optim.Optimizer):
             self.grads_vector = []
             self.iter_k = 0
             self.norm_params_difference = []
-            sum = 0
+            self.sum = 0
+            self.max_norm = 0
             
         for group in self.param_groups:
             lr = group['lr']
@@ -159,9 +162,9 @@ class Scion(torch.optim.Optimizer):
                     self.norm_params_difference.append(norm_params_diff)
                     norm_grad_diff = torch.dot(norm_backend.lmo(p.grad - self.grads_vector[self.iter_k]).flatten().to(torch.float32),  (p.grad - self.grads_vector[self.iter_k]).flatten()) 
                     norm_grad = torch.dot(norm_backend.lmo(p.grad).flatten().to(torch.float32), p.grad.flatten())
-                    sum += norm_grad_diff
-                    max_norm = max(self.norm_params_difference)    
-                    L_est = sum / max_norm
+                    self.sum += norm_grad_diff
+                    self.max_norm = max(self.norm_params_difference)    
+                    L_est = self.sum / self.max_norm
                     param_size = p.data.size()
                     if wandb_log: 
                         wandb.log({
@@ -403,7 +406,7 @@ class Hyperparameters:
     input_val_bin : str = 'data/fineweb10B/fineweb_val_*.bin' # input .bin to eval validation loss on
     # optimization hyperparams
     batch_size : int = 8*64 # batch size, in sequences, across all devices
-    device_batch_size : int = 16 # batch size, in sequences, per device
+    device_batch_size : int = 32 # batch size, in sequences, per device
     sequence_length : int = 1024 # sequence length, in tokens
     num_iterations : int = 5001 # number of iterations to run
     learning_rate : float = 0.00036
