@@ -597,7 +597,6 @@ for step in range(args.num_iterations + 1):
         opt.step(step=step)
         sched.step()
     for opt in optimizers_SGD:
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         opt.step()
     # null the gradients
     model.zero_grad(set_to_none=True)
