@@ -23,7 +23,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 # wandb logging
 wandb_log = True 
 wandb_project = 'nanogpt'
-wandb_run_name = 'nanogpt_unScion_estimate_blockwise_smoothness_max_norm'
+wandb_run_name = 'nanogpt_unScion_estimate_blockwise_smoothness_SGD'
 
 # -----------------------------------------------------------------------------
 # Scion optimizer
@@ -111,10 +111,7 @@ class Scion(torch.optim.Optimizer):
             raise ValueError(f"Invalid momentum value: {momentum}")       
         self.params_vector = []  
         self.grads_vector = []  
-        self.iter_k = 0
-        self.norm_params_difference = []   
-        self.sum = 0
-        self.max_norm = 0        
+        self.iter_k = 0           
         defaults = dict(lr=lr, momentum=momentum, scale=scale, unconstrained=unconstrained)
         super().__init__(params, defaults)
 
@@ -123,9 +120,6 @@ class Scion(torch.optim.Optimizer):
             self.params_vector = []
             self.grads_vector = []
             self.iter_k = 0
-            self.norm_params_difference = []
-            self.sum = 0
-            self.max_norm = 0
             
         for group in self.param_groups:
             lr = group['lr']
@@ -149,22 +143,12 @@ class Scion(torch.optim.Optimizer):
                 if g is None:
                     continue
                 state = self.state[p]
-
-                if momentum != 1:
-                    if 'momentum_buffer' not in state.keys():
-                        state['momentum_buffer'] = torch.zeros_like(g)
-                    buf = state['momentum_buffer']
-                    buf.mul_(1-momentum).add_(g, alpha=momentum)
-                    g = buf
                     
                 if master_process and (step > 0 and args.val_loss_every > 0 and step % args.val_loss_every == 0):
                     norm_params_diff = norm_backend.calculate_norm(p.data - self.params_vector[self.iter_k])
-                    self.norm_params_difference.append(norm_params_diff)
                     norm_grad_diff = torch.dot(norm_backend.lmo(p.grad - self.grads_vector[self.iter_k]).flatten().to(torch.float32),  (p.grad - self.grads_vector[self.iter_k]).flatten()) 
                     norm_grad = torch.dot(norm_backend.lmo(p.grad).flatten().to(torch.float32), p.grad.flatten())
-                    self.sum += norm_grad_diff
-                    self.max_norm = max(self.norm_params_difference)    
-                    L_est = self.sum / self.max_norm
+                    L_est = norm_grad_diff / norm_params_diff
                     param_size = p.data.size()
                     if wandb_log: 
                         wandb.log({
@@ -176,12 +160,6 @@ class Scion(torch.optim.Optimizer):
                     print(f'step:{step}/{args.num_iterations} ({self.iter_k}) L_estimated: {L_est:.4f} norm_grad: {norm_grad:.4f}')
                         
                     self.iter_k += 1
-
-                update = scale * norm_backend.lmo(g)
-                if unconstrained:
-                    p.data.add_(update, alpha=-lr)  # Unconstrained Scion
-                else:
-                    p.data.mul_(1-lr).add_(update, alpha=-lr) # Scion
 
 
 # -----------------------------------------------------------------------------
@@ -489,6 +467,8 @@ optim_groups = [{
 ]
 optimizer1 = Scion(optim_groups, lr=args.learning_rate, momentum=args.momentum, unconstrained=args.unconstrained)
 optimizers = [optimizer1]
+optimizer2 = torch.optim.SGD(raw_model.parameters(), lr=args.learning_rate, momentum=0.9)
+optimizers_SGD = [optimizer2]
 
 # learning rate decay scheduler (linear warmup and warmdown)
 def get_lr(it):
@@ -616,6 +596,9 @@ for step in range(args.num_iterations + 1):
     for opt, sched in zip(optimizers, schedulers):
         opt.step(step=step)
         sched.step()
+    for opt in optimizers_SGD:
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        opt.step()
     # null the gradients
     model.zero_grad(set_to_none=True)
     # --------------- TRAINING SECTION END -------------------
