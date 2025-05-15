@@ -6,8 +6,8 @@ This repository contains code to evaluate **layer-wise trajectory smoothness** a
 
 The approach builds upon and extends ideas from the following open-source repositories:
 - [modded-nanogpt](https://github.com/KellerJordan/modded-nanogpt)
-- [Scion](https://github.com/LIONS-EPFL/scion)
-- [Cifar-10 airbench](https://github.com/KellerJordan/cifar10-airbench)
+- [scion](https://github.com/LIONS-EPFL/scion)
+- [cifar-10 airbench](https://github.com/KellerJordan/cifar10-airbench)
 
 ## Dataset Preparation
 
