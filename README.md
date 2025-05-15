@@ -15,6 +15,7 @@ To download and cache the **FineWeb** dataset, run:
 
 ```bash
 python data/cached_fineweb10B.py 8
+```
 
 ## Running Smoothness Evaluation
 
@@ -22,3 +23,5 @@ To estimate the layer-wise smoothness for the **NanoGPT** model, run the followi
 
 ```bash
 torchrun --standalone --nproc_per_node=4 train_gpt_unscion_estimate_blockwise_smoothness.py
+```
+This will run the evaluation using PyTorch Distributed Data Parallel (DDP) on a node with 4× A100 40GB GPUs.
